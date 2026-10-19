@@ -176,9 +176,11 @@ services.emoncms.package = pkgs.emoncms.override {
 - `/var/lock/*.lock` → `/run/emoncms/`. On NixOS `/run/lock` is root-only.
 - The backup module's `/tmp/emoncms-flag-*` and `/tmp/backuplock` → `/run/emoncms/`. php-fpm and service-runner each have a private `/tmp`, so files they both need can't live there.
 - service-runner takes `REDIS_HOST`/`REDIS_PORT` from the environment instead of assuming localhost.
-- Backup scripts: `mysqldump -p"${password}"` only adds `-p` when a password is set, because socket auth has none and a bare `-p` prompts. They also call `emoncms-cli admin:dbupdate` instead of EmonScripts' `emoncmsdbupdate.php`.
+- Backup scripts: `mysqldump -p"${password}"` only adds `-p` when a password is set, because socket auth has none and a bare `-p` prompts. They also call `emoncms-cli admin:dbupdate` instead of EmonScripts' `emoncmsdbupdate.php`. The import checks the username rather than the password before restoring the database, for the same reason.
 
 The backup, sync and postprocess shell scripts call `sudo` and `systemctl`. service-runner's PATH has a `sudo` that simply runs the command unprivileged. Their `systemctl stop/start` calls fail as non-root, as they do in the container, so the export log reports "completed with ERRORS" even when the archive is fine.
+
+php-fpm clears the environment, so the pool gets an explicit `PATH` (coreutils, grep, sed, awk, procps, systemd, util-linux, which, php). The postprocess and backup pages check for service-runner with `systemctl show` and `ps ax`, and without it they report service-runner as not running and postprocess jobs are never queued.
 
 **nginx instead of Apache.** `.htaccess` is translated as follows: unknown paths are rewritten to `index.php?q=<path>`; `/emoncms/<x>` is rewritten to `/<x>`; access to `/scripts/`, `/tests/`, dotfiles, `php-info.php` and `*.ini|cfg|log|sh|sql|bak…` is denied; `HTTP_AUTHORIZATION` is passed through; uploads are allowed up to 3G and requests up to 300s, for backup import.
 
@@ -226,27 +228,31 @@ For 11.9.10 → 12.x specifically: take a DB dump first (`mysqldump emoncms`). V
 
 ## Verification
 
-`nix flake check` runs `checks.<system>.vm` (`tests/vm.nix`). GitHub Actions runs it on every push and pull request (`.github/workflows/check.yml`): on an x86_64 runner with KVM, and, once the repository is public, on an `ubuntu-24.04-arm` runner, which has no KVM, so the test runs there under QEMU emulation (about seven minutes). The arm job is skipped while the repository is private, because GitHub only provides those runners free to public repositories. It boots a NixOS VM with the module, using a local broker and feedwriter switched on, and checks:
+`nix flake check` runs `checks.<system>.vm` (`tests/vm.nix`). GitHub Actions runs it on every push and pull request (`.github/workflows/check.yml`): on an x86_64 runner with KVM, and, once the repository is public, on an `ubuntu-24.04-arm` runner, which has no KVM, so the test runs there under QEMU emulation, much slower than with KVM. The arm job is skipped while the repository is private, because GitHub only provides those runners free to public repositories. It boots two NixOS VMs with the module: `machine` (local broker, feedwriter on) and `remote`, a second Emoncms for the sync module to talk to. It checks:
 
 - `emoncms-setup` renders `settings.ini` with the MQTT secret substituted, and the secret is not in the store.
 - Migrations run, and a second `emoncms-cli admin:dbupdate` reports "No migrations to run".
 - nginx returns 403 for `/settings.ini` and `/scripts/…`, and serves the login page.
-- Registering a user and fetching API keys work.
+- Registering a user, fetching API keys and logging in work.
 - **HTTP input** (`/input/post`) lands as an input.
 - **MQTT input**: `mosquitto_pub emon/mqttnode/temp` is picked up by `emoncms_mqtt` and shows up as an input.
 - A feed write through the Redis buffer is flushed to `phpfina/<id>.dat` by `feedwriter`.
-- A backup export queued in Redis is run by `service-runner` and produces a `.tar.gz` containing `emoncms.sql` and the phpfina data.
+- **Postprocess**: a `scalefeed` job created through the API is queued to `service-runner` and writes the scaled values.
+- **Sync download**: after saving `remote` on the Sync page's API, a feed download is run by `service-runner` (`emoncms-sync.sh`) and the data arrives locally.
+- **Sync upload**: flagging a feed for upload makes `emoncms_sync` create it on `remote` and upload its data.
+- The backup page sees service-runner as running.
+- **Backup round trip through the web endpoints**: `/backup/start` exports, `/backup/download` returns an archive with `emoncms.sql` and the phpfina data, and uploading it to `/backup/upload` imports it: a later input disappears, a deleted feed file comes back, and restored files stay writable by the `emoncms` user.
+- php-fpm logs no PHP fatal errors.
 
 Not verified:
 
-1. **Backup import**, and the sync and postprocess jobs, haven't been run end to end. Only export is tested. Import reuses the same mechanisms, with `mysql` and `redis-cli flushall` on PATH.
-2. **Restoring a backup taken in the Docker container** into this setup hasn't been tried. The container's Redis prefix is also `''`, so that matches.
-3. **The archive's `settings.ini` is a symlink.** Backups contain it as a symlink to `/run/emoncms/settings.ini` rather than its contents. That's arguably right, since settings come from Nix, but it differs from the container.
-4. **The export log always ends "completed with ERRORS"**, because of the `systemctl stop feedwriter` and `cd /boot` (Raspberry Pi) steps. The archive itself is fine.
-5. **Edge cases of the `.htaccess` translation.** Odd paths, such as ones containing spaces, `&` or `%2F`, haven't been compared against Apache.
-6. **Remote MariaDB/Redis** (`createLocally = false` with `passwordFile`) is implemented but not covered by the test.
-7. **Version choices.** Module versions are the commits that were current while core 11.9.10 was the stable release. Device is 2.3.5, where the reference changelog says 2.3.3. The other module versions match the changelog.
-8. **The vfkit launcher has been run on one Mac**, where the guest booted and the web login worked. Other commands, such as `reset`, haven't been checked there. Before that, the x86_64 guest image was built and booted under QEMU with the same disk layout (virtio root disk, a second disk with serial `emoncms-data`, virtio console on hvc0). That checked the root grows to fill its disk, `/var` is formatted on first boot and survives a rebuilt image, and Emoncms, MQTT input and SSH work.
+1. **Restoring a backup taken in the Docker container** into this setup hasn't been tried. The container's Redis prefix is also `''`, so that matches.
+2. **The archive's `settings.ini` is a symlink.** Backups contain it as a symlink to `/run/emoncms/settings.ini` rather than its contents. That's arguably right, since settings come from Nix, but it differs from the container.
+3. **The export log always ends "completed with ERRORS"**, because of the `systemctl stop feedwriter` and `cd /boot` (Raspberry Pi) steps. The archive itself is fine.
+4. **Edge cases of the `.htaccess` translation.** Odd paths, such as ones containing spaces, `&` or `%2F`, haven't been compared against Apache.
+5. **Remote MariaDB/Redis** (`createLocally = false` with `passwordFile`) is implemented but not covered by the test.
+6. **Version choices.** Module versions are the commits that were current while core 11.9.10 was the stable release. Device is 2.3.5, where the reference changelog says 2.3.3. The other module versions match the changelog.
+7. **The vfkit launcher has been run on one Mac**, where the guest booted and the web login worked. Other commands, such as `reset`, haven't been checked there. Before that, the x86_64 guest image was built and booted under QEMU with the same disk layout (virtio root disk, a second disk with serial `emoncms-data`, virtio console on hvc0). That checked the root grows to fill its disk, `/var` is formatted on first boot and survives a rebuilt image, and Emoncms, MQTT input and SSH work.
 
 ## Licence
 

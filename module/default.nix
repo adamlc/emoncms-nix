@@ -586,6 +586,21 @@ in
         user = cfg.user;
         group = cfg.group;
         phpPackage = cfg.phpPackage;
+        # php-fpm clears the environment, so exec() falls back to /bin:/usr/bin,
+        # which is empty on NixOS. The postprocess and backup pages shell out to
+        # `systemctl show service-runner` and `ps ax | grep service-runner.py`
+        # and report service-runner as down without these.
+        phpEnv.PATH = lib.makeBinPath [
+          cfg.phpPackage
+          pkgs.coreutils
+          pkgs.gnugrep
+          pkgs.gnused
+          pkgs.gawk
+          pkgs.procps
+          pkgs.systemd
+          pkgs.util-linux
+          pkgs.which
+        ];
         phpOptions = ''
           max_execution_time = 300
           post_max_size = 3G

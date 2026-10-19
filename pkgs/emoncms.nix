@@ -94,6 +94,9 @@ stdenvNoCC.mkDerivation {
         # EmonScripts is not installed; run the core migration instead
         sed -i "s|php /opt/openenergymonitor/EmonScripts/common/emoncmsdbupdate.php|(cd $root/www \&\& php scripts/emoncms-cli admin:dbupdate)|; s|-f /opt/openenergymonitor/EmonScripts/common/emoncmsdbupdate.php|-d $root/www|" "$f"
       done
+      # ...and the import treats an empty password as unreadable settings.
+      substituteInPlace $root/modules/backup/emoncms-import.sh \
+        --replace-fail 'if [ -n "$password" ]' 'if [ -n "$username" ]'
     ''}
 
     runHook postInstall
