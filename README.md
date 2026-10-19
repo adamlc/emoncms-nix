@@ -41,7 +41,7 @@ Add the flake as an input to your system's flake and import its NixOS module:
 
 Then open `http://emoncms.lan/` and register. The first account becomes the admin.
 
-The module builds Emoncms and its PHP with your system's `pkgs`, so `follows` only saves a second nixpkgs in your lock file. It is built and tested against nixos-26.05. Pin a commit with `github:adamlc/emoncms-nix/<rev>` and move it with `nix flake update emoncms`.
+The module builds Emoncms and its PHP with your system's `pkgs`, so `follows` only saves a second nixpkgs in your lock file. It is built and tested against nixos-26.05. Pin a release with `github:adamlc/emoncms-nix/v0.1.0` and move to a newer tag when you choose; [CHANGELOG.md](CHANGELOG.md) says which Emoncms version each release pins and what changed. `github:adamlc/emoncms-nix` follows `main`, which you move with `nix flake update emoncms`.
 
 Flake outputs:
 
