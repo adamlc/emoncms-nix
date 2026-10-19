@@ -226,7 +226,7 @@ For 11.9.10 → 12.x specifically: take a DB dump first (`mysqldump emoncms`). V
 
 ## Verification
 
-`nix flake check` runs `checks.<system>.vm` (`tests/vm.nix`). GitHub Actions runs it on every push and pull request (`.github/workflows/check.yml`): on an x86_64 runner with KVM, and, once the repository is public, on an `ubuntu-24.04-arm` runner. The arm job is skipped while the repository is private, because GitHub only provides those runners free to public repositories. It boots a NixOS VM with the module, using a local broker and feedwriter switched on, and checks:
+`nix flake check` runs `checks.<system>.vm` (`tests/vm.nix`). GitHub Actions runs it on every push and pull request (`.github/workflows/check.yml`): on an x86_64 runner with KVM, and, once the repository is public, on an `ubuntu-24.04-arm` runner, which has no KVM, so the test runs there under QEMU emulation (about seven minutes). The arm job is skipped while the repository is private, because GitHub only provides those runners free to public repositories. It boots a NixOS VM with the module, using a local broker and feedwriter switched on, and checks:
 
 - `emoncms-setup` renders `settings.ini` with the MQTT secret substituted, and the secret is not in the store.
 - Migrations run, and a second `emoncms-cli admin:dbupdate` reports "No migrations to run".
@@ -243,11 +243,10 @@ Not verified:
 2. **Restoring a backup taken in the Docker container** into this setup hasn't been tried. The container's Redis prefix is also `''`, so that matches.
 3. **The archive's `settings.ini` is a symlink.** Backups contain it as a symlink to `/run/emoncms/settings.ini` rather than its contents. That's arguably right, since settings come from Nix, but it differs from the container.
 4. **The export log always ends "completed with ERRORS"**, because of the `systemctl stop feedwriter` and `cd /boot` (Raspberry Pi) steps. The archive itself is fine.
-5. **aarch64-linux in CI.** Until the repository is public, only x86_64-linux runs the VM test in CI. The aarch64 VM test has not run in CI yet.
-6. **Edge cases of the `.htaccess` translation.** Odd paths, such as ones containing spaces, `&` or `%2F`, haven't been compared against Apache.
-7. **Remote MariaDB/Redis** (`createLocally = false` with `passwordFile`) is implemented but not covered by the test.
-8. **Version choices.** Module versions are the commits that were current while core 11.9.10 was the stable release. Device is 2.3.5, where the reference changelog says 2.3.3. The other module versions match the changelog.
-9. **The vfkit launcher has been run on one Mac**, where the guest booted and the web login worked. Other commands, such as `reset`, haven't been checked there. Before that, the x86_64 guest image was built and booted under QEMU with the same disk layout (virtio root disk, a second disk with serial `emoncms-data`, virtio console on hvc0). That checked the root grows to fill its disk, `/var` is formatted on first boot and survives a rebuilt image, and Emoncms, MQTT input and SSH work.
+5. **Edge cases of the `.htaccess` translation.** Odd paths, such as ones containing spaces, `&` or `%2F`, haven't been compared against Apache.
+6. **Remote MariaDB/Redis** (`createLocally = false` with `passwordFile`) is implemented but not covered by the test.
+7. **Version choices.** Module versions are the commits that were current while core 11.9.10 was the stable release. Device is 2.3.5, where the reference changelog says 2.3.3. The other module versions match the changelog.
+8. **The vfkit launcher has been run on one Mac**, where the guest booted and the web login worked. Other commands, such as `reset`, haven't been checked there. Before that, the x86_64 guest image was built and booted under QEMU with the same disk layout (virtio root disk, a second disk with serial `emoncms-data`, virtio console on hvc0). That checked the root grows to fill its disk, `/var` is formatted on first boot and survives a rebuilt image, and Emoncms, MQTT input and SSH work.
 
 ## Licence
 
