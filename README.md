@@ -166,8 +166,6 @@ services.emoncms.package = pkgs.emoncms.override {
 
 **Native services rather than a container.** Each daemon is a stock NixOS service, and systemd ordering replaces s6's oneshots. The cost is that Emoncms's self-update features cannot work against a read-only tree: the admin update page is turned off (`enable_update_ui = false`), and you upgrade by changing the pins in `pkgs/sources.nix`.
 
-**Upstream, not the fork.** The reference Dockerfile defaults to `alexandrecuer/emoncms@master`. That branch is a stale mirror of upstream (0 commits ahead), and the published images are built from `emoncms/emoncms@stable`. The fork's `bios_master` adds Redis batch "forecast" reads and OBM branding, which aren't needed here.
-
 **MQTT extension.** `mgdm/Mosquitto-PHP` does not compile on PHP 8 (it fails on `TSRMLS_CC`). The flake builds OpenEnergyMonitor's fork with `php84.buildPecl`, against the same PHP that php-fpm and the workers use. The only packaging wrinkle is that its `config.m4` wants mosquitto's headers and library under one prefix, so it gets a `symlinkJoin` of `mosquitto.dev` and `mosquitto.lib`.
 
 **Source patches** (sed at build time, in `pkgs/emoncms.nix`):
