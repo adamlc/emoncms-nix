@@ -7,7 +7,8 @@ Emoncms 11.9.10 as native NixOS services: a read-only package, a php-fpm pool be
 ```nix
 # flake.nix of your system
 {
-  inputs.emoncms.url = "path:/path/to/emoncms-flake";   # or a git URL
+  # private repo: ssh URL uses your GitHub ssh key
+  inputs.emoncms.url = "git+ssh://git@github.com/adamlc/emoncms-nix";
   outputs = { nixpkgs, emoncms, ... }: {
     nixosConfigurations.host = nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
