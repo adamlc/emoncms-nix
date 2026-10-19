@@ -1,14 +1,21 @@
 # emoncms-nix
 
+[![check](https://github.com/adamlc/emoncms-nix/actions/workflows/check.yml/badge.svg)](https://github.com/adamlc/emoncms-nix/actions/workflows/check.yml)
+
 Emoncms 11.9.10 as native NixOS services: a read-only package, a php-fpm pool behind nginx, and one systemd unit per background worker. It replaces the all-in-one s6 container from [Open-Building-Management/emoncms](https://github.com/Open-Building-Management/emoncms), which was used as the behavioural reference.
 
 ## Quick start
 
+Add the flake as an input to your system's flake and import its NixOS module:
+
 ```nix
 # flake.nix of your system
 {
-  # private repo: ssh URL uses your GitHub ssh key
-  inputs.emoncms.url = "git+ssh://git@github.com/adamlc/emoncms-nix";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
+  inputs.emoncms = {
+    url = "github:adamlc/emoncms-nix";
+    inputs.nixpkgs.follows = "nixpkgs";
+  };
   outputs = { nixpkgs, emoncms, ... }: {
     nixosConfigurations.host = nixpkgs.lib.nixosSystem {
       system = "x86_64-linux";
@@ -33,6 +40,18 @@ Emoncms 11.9.10 as native NixOS services: a read-only package, a php-fpm pool be
 ```
 
 Then open `http://emoncms.lan/` and register. The first account becomes the admin.
+
+The module builds Emoncms and its PHP with your system's `pkgs`, so `follows` only saves a second nixpkgs in your lock file. It is built and tested against nixos-26.05. Pin a commit with `github:adamlc/emoncms-nix/<rev>` and move it with `nix flake update emoncms`.
+
+Flake outputs:
+
+| Output | Contents |
+|---|---|
+| `nixosModules.default` (alias `nixosModules.emoncms`) | The `services.emoncms` module. It is self-contained and does not need the overlay. |
+| `overlays.default` | Adds `pkgs.emoncms` and `pkgs.emoncms-php`, for overriding the package (see below). |
+| `packages.<system>.{emoncms,emoncms-php,php-mosquitto}` | The same packages, for `x86_64-linux` and `aarch64-linux`. |
+| `checks.<system>.{vm,formatting}` | The NixOS VM test (see Verification) and a `nixfmt` check. |
+| `apps.<darwin>.vm`, `nixosConfigurations.vfkit-*` | The macOS test VM (see below). |
 
 TLS: set it on the vhost the module creates, e.g. `services.nginx.virtualHosts."emoncms.lan" = { forceSSL = true; enableACME = true; };`.
 
@@ -137,7 +156,8 @@ Secrets never enter the Nix store. The template holds placeholders, and `emoncms
 To change the installed modules, override the package:
 
 ```nix
-services.emoncms.package = emoncms.packages.x86_64-linux.emoncms.override {
+# with overlays.default applied; or emoncms.packages.x86_64-linux.emoncms.override
+services.emoncms.package = pkgs.emoncms.override {
   linkedModules = [ "postprocess" "backup" ];   # drop sync
 };
 ```
@@ -206,7 +226,7 @@ For 11.9.10 → 12.x specifically: take a DB dump first (`mysqldump emoncms`). V
 
 ## Verification
 
-`nix flake check` runs `checks.<system>.vm` (`tests/vm.nix`). It boots a NixOS VM with the module, using a local broker and feedwriter switched on, and checks:
+`nix flake check` runs `checks.<system>.vm` (`tests/vm.nix`). GitHub Actions runs it on every push and pull request (`.github/workflows/check.yml`): on an x86_64 runner with KVM, and, once the repository is public, on an `ubuntu-24.04-arm` runner. The arm job is skipped while the repository is private, because GitHub only provides those runners free to public repositories. It boots a NixOS VM with the module, using a local broker and feedwriter switched on, and checks:
 
 - `emoncms-setup` renders `settings.ini` with the MQTT secret substituted, and the secret is not in the store.
 - Migrations run, and a second `emoncms-cli admin:dbupdate` reports "No migrations to run".
@@ -223,8 +243,12 @@ Not verified:
 2. **Restoring a backup taken in the Docker container** into this setup hasn't been tried. The container's Redis prefix is also `''`, so that matches.
 3. **The archive's `settings.ini` is a symlink.** Backups contain it as a symlink to `/run/emoncms/settings.ini` rather than its contents. That's arguably right, since settings come from Nix, but it differs from the container.
 4. **The export log always ends "completed with ERRORS"**, because of the `systemctl stop feedwriter` and `cd /boot` (Raspberry Pi) steps. The archive itself is fine.
-5. **Only x86_64-linux was built and tested.** aarch64-linux is declared but not built.
+5. **aarch64-linux in CI.** Until the repository is public, only x86_64-linux runs the VM test in CI. The aarch64 VM test has not run in CI yet.
 6. **Edge cases of the `.htaccess` translation.** Odd paths, such as ones containing spaces, `&` or `%2F`, haven't been compared against Apache.
 7. **Remote MariaDB/Redis** (`createLocally = false` with `passwordFile`) is implemented but not covered by the test.
 8. **Version choices.** Module versions are the commits that were current while core 11.9.10 was the stable release. Device is 2.3.5, where the reference changelog says 2.3.3. The other module versions match the changelog.
-9. **The vfkit launcher hasn't been run on a Mac.** The x86_64 guest image was built and booted under QEMU with the same disk layout (virtio root disk, a second disk with serial `emoncms-data`, virtio console on hvc0). That checked the root grows to fill its disk, `/var` is formatted on first boot and survives a rebuilt image, and Emoncms, MQTT input and SSH work. vfkit itself, Apple's EFI loader, the aarch64 image, the dhcpd_leases lookup and vfkit's `Stop` request were not exercised.
+9. **The vfkit launcher has been run on one Mac**, where the guest booted and the web login worked. Other commands, such as `reset`, haven't been checked there. Before that, the x86_64 guest image was built and booted under QEMU with the same disk layout (virtio root disk, a second disk with serial `emoncms-data`, virtio console on hvc0). That checked the root grows to fill its disk, `/var` is formatted on first boot and survives a rebuilt image, and Emoncms, MQTT input and SSH work.
+
+## Licence
+
+The Nix code in this repository is released under the [MIT licence](LICENSE), the same licence as nixpkgs, so any of it can be upstreamed there. It contains no Emoncms source; the build fetches Emoncms and its modules, which are AGPL-3.0, and the Mosquitto PHP extension, which is BSD-3-Clause. Those licences apply to the software you deploy. MIT is compatible with the AGPL, so combining the two is fine. If you change Emoncms itself and expose it to users over a network, the AGPL asks you to offer them your modified source.

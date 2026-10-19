@@ -67,8 +67,12 @@
 
       checks = forAllSystems (pkgs: {
         vm = pkgs.testers.runNixOSTest (import ./tests/vm.nix { inherit self; });
+        formatting = pkgs.runCommand "emoncms-nix-formatting" { nativeBuildInputs = [ pkgs.nixfmt ]; } ''
+          find ${self} -name '*.nix' -exec nixfmt --check {} +
+          touch $out
+        '';
       });
 
-      formatter = forAllSystems (pkgs: pkgs.nixfmt);
+      formatter = forAllSystems (pkgs: pkgs.nixfmt-tree);
     };
 }
