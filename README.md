@@ -162,6 +162,40 @@ The backup, sync and postprocess shell scripts call `sudo` and `systemctl`. serv
 
 **nginx instead of Apache.** `.htaccess` is translated as follows: unknown paths are rewritten to `index.php?q=<path>`; `/emoncms/<x>` is rewritten to `/<x>`; access to `/scripts/`, `/tests/`, dotfiles, `php-info.php` and `*.ini|cfg|log|sh|sql|bak…` is denied; `HTTP_AUTHORIZATION` is passed through; uploads are allowed up to 3G and requests up to 300s, for backup import.
 
+## Local test VM on macOS (vfkit)
+
+`nix run .#vm` boots a standalone NixOS guest running this module (MariaDB, Redis and Mosquitto all local) under [vfkit](https://github.com/crc-org/vfkit), Apple's Virtualization.framework. An Apple Silicon Mac gets an aarch64-linux guest and an Intel Mac an x86_64-linux one.
+
+```sh
+nix run .#vm              # boot in this terminal; you're logged in as root; `poweroff` quits
+nix run .#vm -- start -d  # boot in the background, wait for Emoncms, print its URL
+nix run .#vm -- ip        # the VM's address on the vmnet NAT (usually 192.168.64.x)
+nix run .#vm -- ssh       # root shell (password: emoncms); `-- ssh journalctl -u emoncms_mqtt` works too
+nix run .#vm -- stop      # clean shutdown
+nix run .#vm -- reset     # delete the VM's disks
+```
+
+Open `http://<ip>/` (or `http://emoncms-vm.local/` via mDNS) and register the first user. The broker listens on `<ip>:1883` with user `emoncms`, password `emoncms`, so from the Mac `mosquitto_pub -h <ip> -u emoncms -P emoncms -t emon/test/power -m 100` creates an input.
+
+**You need a Linux builder.** The guest image is aarch64-linux (or x86_64-linux), which macOS can't build itself. Any remote or local Linux builder works; the simplest is nix-darwin's:
+
+```nix
+nix.linux-builder.enable = true;   # aarch64-linux builder VM, for Apple Silicon
+```
+
+The image is a systemd-repart appliance image, so building it needs no KVM or nested virtualisation, only an ordinary builder. Most of the closure comes from cache.nixos.org; the builder compiles Emoncms, the Mosquitto PHP extension and the image itself.
+
+**How it's laid out.** `vm/guest.nix` is the guest configuration (exposed as `nixosConfigurations.vfkit-aarch64` and `vfkit-x86_64`), and `vm/vfkit.nix` is the launcher. State lives in `~/.local/state/emoncms-vm` (`EMONCMS_VM_DIR` overrides it):
+
+- `root.raw` is a copy of the built image (an APFS clone, so it's instant). It boots systemd-boot and a UKI from the ESP, and grows to `EMONCMS_VM_ROOT_SIZE` (4G) on first boot. When the flake changes, the next start replaces it.
+- `data.raw` (`EMONCMS_VM_DATA_SIZE`, 8G, sparse) is a second disk mounted at `/var` and formatted on first boot. MariaDB, Redis, feed data, logs and the SSH host keys live there, so users, inputs and feeds survive a rebuilt image. `reset` deletes both disks.
+- The NIC has a fixed MAC (`EMONCMS_VM_MAC`), so vmnet's DHCP keeps handing out the same address, and `ip` looks it up in `/var/db/dhcpd_leases`.
+- `EMONCMS_VM_CPUS` (2) and `EMONCMS_VM_MEMORY` (2048 MiB) size the VM.
+
+Iterating on the module is: edit, `nix run .#vm -- stop`, `nix run .#vm`. There is no `nixos-rebuild` inside the guest (the appliance image has no Nix database), so changes always go through a new image.
+
+The guest is for local testing only: root's password is `emoncms`, SSH accepts it, and ports 80 and 1883 are open. vmnet's NAT is reachable only from the Mac itself.
+
 ## Upgrading Emoncms later
 
 1. Update the commits and hashes in `pkgs/sources.nix`. To get a hash, set it to `lib.fakeHash`, build, and copy the hash from the error.
@@ -193,3 +227,4 @@ Not verified:
 6. **Edge cases of the `.htaccess` translation.** Odd paths, such as ones containing spaces, `&` or `%2F`, haven't been compared against Apache.
 7. **Remote MariaDB/Redis** (`createLocally = false` with `passwordFile`) is implemented but not covered by the test.
 8. **Version choices.** Module versions are the commits that were current while core 11.9.10 was the stable release. Device is 2.3.5, where the reference changelog says 2.3.3. The other module versions match the changelog.
+9. **The vfkit launcher hasn't been run on a Mac.** The x86_64 guest image was built and booted under QEMU with the same disk layout (virtio root disk, a second disk with serial `emoncms-data`, virtio console on hvc0). That checked the root grows to fill its disk, `/var` is formatted on first boot and survives a rebuilt image, and Emoncms, MQTT input and SSH work. vfkit itself, Apple's EFI loader, the aarch64 image, the dhcpd_leases lookup and vfkit's `Stop` request were not exercised.
