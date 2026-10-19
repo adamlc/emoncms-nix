@@ -53,8 +53,8 @@
         machine.succeed("curl -s -o /dev/null -w '%{http_code}' http://localhost/scripts/emoncms-cli | grep -q 403")
 
     with subtest("web UI renders"):
-        machine.succeed("curl -sf http://localhost/ | grep -qi emoncms")
-        machine.succeed("curl -sf http://localhost/user/login | grep -qi password")
+        machine.succeed("curl -sf http://localhost/ | grep -i emoncms >/dev/null")
+        machine.succeed("curl -sf http://localhost/user/login | grep -i password >/dev/null")
 
     with subtest("register user and get API keys"):
         r = json.loads(machine.succeed(

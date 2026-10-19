@@ -24,7 +24,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # The NixOS VM test needs /dev/kvm. x86_64 runners expose it; where it is
       # missing, QEMU falls back to emulation (TCG), which is slower but works.
