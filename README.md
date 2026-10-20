@@ -226,7 +226,7 @@ Your data is the MariaDB database (users, API keys, inputs, feeds' metadata, das
 
 Before you start, deploy the module with an empty install and check you can reach the login page. Don't register a user on it; the import replaces the database.
 
-**Route 1: the Backup module (simplest).**
+**Route 1: the Backup module (recommended).** This is the route a real migration used.
 
 1. In the container, stop new data arriving (or accept a small gap) and, if the container runs feedwriter, wait one interval (`redisbuffer[sleep]`, 300 s by default) so buffered values reach disk.
 2. In the container's web UI, open Backup, run Export and download the archive.
@@ -287,7 +287,7 @@ For 11.9.10 → 12.x specifically: take a DB dump first (`mysqldump emoncms`). V
 
 Not verified:
 
-1. **Migration routes.** A real installation has been migrated from the container and runs on this module, but both routes in [Migrating from the Docker container](#migrating-from-the-docker-container) haven't each been exercised against a range of container versions. The container's Redis prefix is also `''`, so that matches.
+1. **Migration routes.** A real installation has been migrated from the container with the Backup module route in [Migrating from the Docker container](#migrating-from-the-docker-container), but only from one container version. The manual route (copying the database and files) hasn't been tried. The container's Redis prefix is also `''`, so that matches.
 2. **The archive's `settings.ini` is a symlink.** Backups contain it as a symlink to `/run/emoncms/settings.ini` rather than its contents. That's arguably right, since settings come from Nix, but it differs from the container.
 3. **The export log always ends "completed with ERRORS"**, because of the `systemctl stop feedwriter` and `cd /boot` (Raspberry Pi) steps. The archive itself is fine.
 4. **Edge cases of the `.htaccess` translation.** Odd paths, such as ones containing spaces, `&` or `%2F`, haven't been compared against Apache.
