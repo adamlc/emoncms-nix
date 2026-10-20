@@ -4,6 +4,8 @@
 
 Emoncms 11.9.10 as native NixOS services: a read-only package, a php-fpm pool behind nginx, and one systemd unit per background worker. It replaces the all-in-one s6 container from [Open-Building-Management/emoncms](https://github.com/Open-Building-Management/emoncms), which was used as the behavioural reference.
 
+It is in real use: an existing installation has been moved from that container onto this module and runs day to day, with MQTT input, feeds, dashboards and the background workers all working. The flake is meant to be usable as-is by anyone running NixOS; see [Migrating from the Docker container](#migrating-from-the-docker-container) if you are coming from the container.
+
 ## Quick start
 
 Add the flake as an input to your system's flake and import its NixOS module:
@@ -52,6 +54,8 @@ Flake outputs:
 | `packages.<system>.{emoncms,emoncms-php,php-mosquitto}` | The same packages, for `x86_64-linux` and `aarch64-linux`. |
 | `checks.<system>.{vm,formatting}` | The NixOS VM test (see Verification) and a `nixfmt` check. |
 | `apps.<darwin>.vm`, `nixosConfigurations.vfkit-*` | The macOS test VM (see below). |
+
+If you set `mqtt.createLocally = true` instead of using an existing broker, the module runs Mosquitto for you; open port 1883 too if devices on your network publish to it.
 
 TLS: set it on the vhost the module creates, e.g. `services.nginx.virtualHosts."emoncms.lan" = { forceSSL = true; enableACME = true; };`.
 
@@ -216,6 +220,45 @@ Iterating on the module is: edit, `nix run .#vm -- stop`, `nix run .#vm`. There 
 
 The guest is for local testing only: root's password is `emoncms`, SSH accepts it, and ports 80 and 1883 are open. vmnet's NAT is reachable only from the Mac itself.
 
+## Migrating from the Docker container
+
+Your data is the MariaDB database (users, API keys, inputs, feeds' metadata, dashboards) and the timeseries files (`phpfina`, `phptimeseries`). Redis holds only caches and the feedwriter buffer, so it does not need to move. Either route below keeps your API keys, so devices posting over HTTP keep working once they point at the new host.
+
+Before you start, deploy the module with an empty install and check you can reach the login page. Don't register a user on it; the import replaces the database.
+
+**Route 1: the Backup module (simplest).**
+
+1. In the container, stop new data arriving (or accept a small gap) and, if the container runs feedwriter, wait one interval (`redisbuffer[sleep]`, 300 s by default) so buffered values reach disk.
+2. In the container's web UI, open Backup, run Export and download the archive.
+3. On the NixOS host, register a temporary user (the first account is the admin), open Backup and upload the archive under Import. It restores the database and the timeseries files and runs the schema migrations. The temporary user is replaced by your old accounts, so sign in again with your old login.
+
+The upload limit is 3 GB. For a larger archive use route 2.
+
+**Route 2: copy the database and files by hand.**
+
+1. Stop the container (so nothing writes while you copy), after the feedwriter wait above.
+2. Dump the database from inside the container, e.g. `mysqldump emoncms > emoncms.sql`, and copy out the `phpfina` and `phptimeseries` directories from its data volume.
+3. On the host, load the dump and put the files in place:
+
+   ```sh
+   sudo systemctl stop emoncms_mqtt feedwriter service-runner emoncms_sync phpfpm-emoncms
+   sudo mysql emoncms < emoncms.sql
+   sudo cp -a phpfina phptimeseries /var/opt/emoncms/
+   sudo chown -R emoncms:emoncms /var/opt/emoncms
+   sudo systemctl restart emoncms-setup    # applies schema migrations
+   sudo systemctl start phpfpm-emoncms emoncms_mqtt service-runner   # plus feedwriter / emoncms_sync if enabled
+   ```
+
+   `sudo mysql` works because NixOS's MariaDB lets root in over the unix socket. Adjust `/var/opt/emoncms` if you changed `dataDir`.
+
+**After either route:**
+
+- Point your devices (emonhub, emonTx, other MQTT publishers or HTTP posters) at the new host, or move the old hostname over to it.
+- Keep `mqtt.basetopic` (default `emon`) the same as the container's, or MQTT inputs will appear under new names.
+- Settings you changed in the container's `settings.ini` don't come across, because `settings.ini` is generated from Nix. Set them with `services.emoncms.settings`.
+- Check `journalctl -u emoncms_mqtt -f` shows incoming messages, and that feeds update on the Feeds page.
+- Keep the container's volume until you're happy; switching back is just starting it again.
+
 ## Upgrading Emoncms later
 
 1. Update the commits and hashes in `pkgs/sources.nix`. To get a hash, set it to `lib.fakeHash`, build, and copy the hash from the error.
@@ -226,7 +269,7 @@ For 11.9.10 → 12.x specifically: take a DB dump first (`mysqldump emoncms`). V
 
 ## Verification
 
-`nix flake check` runs `checks.<system>.vm` (`tests/vm.nix`). GitHub Actions runs it on every push and pull request (`.github/workflows/check.yml`): on an x86_64 runner with KVM, and, once the repository is public, on an `ubuntu-24.04-arm` runner, which has no KVM, so the test runs there under QEMU emulation, much slower than with KVM. The arm job is skipped while the repository is private, because GitHub only provides those runners free to public repositories. It boots two NixOS VMs with the module: `machine` (local broker, feedwriter on) and `remote`, a second Emoncms for the sync module to talk to. It checks:
+`nix flake check` runs `checks.<system>.vm` (`tests/vm.nix`). GitHub Actions runs it on every push and pull request (`.github/workflows/check.yml`): on an x86_64 runner with KVM, and on an `ubuntu-24.04-arm` runner, which has no KVM, so the test runs there under QEMU emulation, much slower than with KVM. It boots two NixOS VMs with the module: `machine` (local broker, feedwriter on) and `remote`, a second Emoncms for the sync module to talk to. It checks:
 
 - `emoncms-setup` renders `settings.ini` with the MQTT secret substituted, and the secret is not in the store.
 - Migrations run, and a second `emoncms-cli admin:dbupdate` reports "No migrations to run".
@@ -244,7 +287,7 @@ For 11.9.10 → 12.x specifically: take a DB dump first (`mysqldump emoncms`). V
 
 Not verified:
 
-1. **Restoring a backup taken in the Docker container** into this setup hasn't been tried. The container's Redis prefix is also `''`, so that matches.
+1. **Migration routes.** A real installation has been migrated from the container and runs on this module, but both routes in [Migrating from the Docker container](#migrating-from-the-docker-container) haven't each been exercised against a range of container versions. The container's Redis prefix is also `''`, so that matches.
 2. **The archive's `settings.ini` is a symlink.** Backups contain it as a symlink to `/run/emoncms/settings.ini` rather than its contents. That's arguably right, since settings come from Nix, but it differs from the container.
 3. **The export log always ends "completed with ERRORS"**, because of the `systemctl stop feedwriter` and `cd /boot` (Raspberry Pi) steps. The archive itself is fine.
 4. **Edge cases of the `.htaccess` translation.** Odd paths, such as ones containing spaces, `&` or `%2F`, haven't been compared against Apache.
