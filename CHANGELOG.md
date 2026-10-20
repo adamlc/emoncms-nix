@@ -6,6 +6,14 @@ While the version is 0.x, a minor bump (0.1 → 0.2) may change module options i
 
 ## [Unreleased]
 
+### Added
+
+- README guide to migrating an existing installation from the Open-Building-Management Docker container, by Backup module export/import or by copying the database and timeseries files.
+
+### Changed
+
+- README notes that the flake is in real use and drops wording that assumed the repository was still private.
+
 ## [0.1.0] - 2026-10-19
 
 Pins **Emoncms 11.9.10**, PHP 8.4, nixos-26.05.
