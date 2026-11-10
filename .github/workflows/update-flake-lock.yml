@@ -1,0 +1,31 @@
+name: update-flake-lock
+
+on:
+  schedule:
+    # Mondays 06:00 UTC
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: cachix/install-nix-action@v31
+
+      # Pull requests opened with the default GITHUB_TOKEN do not trigger other
+      # workflows, so `check` would not run on them. FLAKE_LOCK_TOKEN is a
+      # fine-grained token with Contents and Pull requests read/write on this
+      # repository; without it the PR is still opened, but CI has to be started
+      # by hand.
+      - uses: DeterminateSystems/update-flake-lock@v29
+        with:
+          token: ${{ secrets.FLAKE_LOCK_TOKEN || github.token }}
+          pr-title: "Update flake.lock"
+          pr-labels: |
+            dependencies

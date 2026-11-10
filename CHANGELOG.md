@@ -14,6 +14,10 @@ While the version is 0.x, a minor bump (0.1 → 0.2) may change module options i
 
 - README notes that the flake is in real use and drops wording that assumed the repository was still private.
 
+### Security
+
+- The locked nixpkgs (nixos-26.05) moves to `da6dc0e`, which ships PHP 8.4.27, fixing the critical PHP remote code execution flaws CVE-2026-109618 and CVE-2026-109619 (PHP 8.4.26 and earlier are affected). The module builds PHP from your system's nixpkgs, so to get the fix on a host, update that host's nixpkgs to a nixos-26.05 that has PHP 8.4.27 (for example `nix flake update nixpkgs`) and rebuild; updating this flake alone does not change the PHP your server runs.
+
 ## [0.1.0] - 2026-10-19
 
 Pins **Emoncms 11.9.10**, PHP 8.4, nixos-26.05.
