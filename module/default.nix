@@ -108,6 +108,8 @@ let
     emonhub_config_path=""
     emonhub_specimen_config=""
     backup_source_path="${cfg.dataDir}/backup/uploads"
+    # Drive backup runs as root, mounts disks and edits /etc/fstab; not supported here
+    drive_backup_enabled="no"
   '';
 
   hasBackup = lib.elem "backup" cfg.package.linkedModules;
@@ -172,7 +174,7 @@ in
     package = mkOption {
       type = types.package;
       default = pkgs.callPackage ../pkgs/emoncms.nix { };
-      defaultText = lib.literalExpression "emoncms 11.9.10 with graph, dashboard, app, device, sync, postprocess, backup";
+      defaultText = lib.literalExpression "emoncms 11.19.8 with graph, dashboard, app, device, sync, postprocess, backup";
       description = ''
         Emoncms tree. Override `modules` / `linkedModules` on it to change which
         modules are installed, e.g. `pkgs.emoncms.override { linkedModules = [ "postprocess" ]; }`.
@@ -293,9 +295,10 @@ in
         type = types.str;
         default = "";
         description = ''
-          Redis key prefix. Must be empty (or "emoncms" with a colon-aware
-          service-runner) for 11.9.x's service-runner to see queued jobs; empty
-          matches the reference container.
+          Redis key prefix. service-runner reads its queue with either an empty
+          prefix or "emoncms"; empty matches the reference container. Changing
+          it on a running install drops the Redis cache (rebuilt from MySQL) and
+          anything still in the feedwriter buffer.
         '';
       };
       passwordFile = mkOption {
@@ -376,6 +379,16 @@ in
       type = types.ints.positive;
       default = 300;
       description = "Seconds between feedwriter flushes (redisbuffer[sleep]). The reference container uses 300.";
+    };
+
+    gravatar.enable = mkOption {
+      type = types.bool;
+      default = false;
+      description = ''
+        Show account avatars from gravatar.com. Emoncms fetches them server
+        side and caches them in /var/cache/emoncms/gravatar; the feature is on
+        only when that directory exists, so it is off unless this is set.
+      '';
     };
 
     serviceRunner.enable = mkOption {
@@ -482,8 +495,6 @@ in
         interface = {
           feedviewpath = mkDefault "graph/";
           enable_admin_ui = mkDefault true;
-          # Updates come from bumping the flake pins, not from the web UI
-          enable_update_ui = mkDefault false;
         };
         log = {
           enabled = mkDefault true;
@@ -524,6 +535,10 @@ in
             mode = "0640";
           };
           "/run/emoncms" = dir;
+        }
+        // optionalAttrs cfg.gravatar.enable {
+          "/var/cache/emoncms" = dir;
+          "/var/cache/emoncms/gravatar" = dir;
         };
 
       # Replaces the container's emoncms_pre + sql_ready oneshots
@@ -645,9 +660,14 @@ in
         }/bin/python3 ${webRoot}/scripts/services/service-runner/service-runner.py";
         restart = "always";
         extra = {
+          # Read by service-runner to build its whitelist of scripts and logs.
+          # Script paths under /opt/emoncms/modules are patched in the package.
           environment = {
             REDIS_HOST = cfg.redis.host;
             REDIS_PORT = toString cfg.redis.port;
+            EMONCMS_DIR = webRoot;
+            EMONCMS_LOG_DIR = cfg.logDir;
+            OPENENERGYMONITOR_DIR = "/var/empty";
           };
           path = [
             cfg.phpPackage
@@ -741,9 +761,10 @@ in
             index index.php;
             client_max_body_size 3G;
             charset utf-8;
+            # Emoncms sends X-Frame-Options, Content-Security-Policy
+            # frame-ancestors and Referrer-Policy itself (interface.frame_ancestors,
+            # embed_frame_ancestors, referrer_policy in settings.ini).
             add_header X-Content-Type-Options "nosniff" always;
-            add_header X-Frame-Options "SAMEORIGIN" always;
-            add_header Referrer-Policy "same-origin" always;
           '';
           locations = {
             # Translation of Emoncms's .htaccess

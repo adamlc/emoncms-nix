@@ -79,12 +79,9 @@ stdenvNoCC.mkDerivation {
           -e "s|/tmp/emoncms-flag-|/run/emoncms/emoncms-flag-|g" \
           -e "s|/tmp/backuplock|/run/emoncms/backuplock|g"
 
-    # service-runner (11.9.x) always connects to localhost:6379
-    substituteInPlace $root/www/scripts/services/service-runner/service-runner.py \
-      --replace-fail "import redis" "import os
-    import redis" \
-      --replace-fail "redis.Redis()" \
-        'redis.Redis(host=os.environ.get("REDIS_HOST", "localhost"), port=int(os.environ.get("REDIS_PORT", "6379")))'
+    # The gravatar proxy cache is a hardcoded constant, not a setting.
+    substituteInPlace $root/www/Modules/user/user_model.php \
+      --replace-fail "'/var/opt/emoncms/gravatar'" "'/var/cache/emoncms/gravatar'"
 
     ${lib.optionalString (lib.elem "backup" linkedModules) ''
       for f in $root/modules/backup/*.sh; do

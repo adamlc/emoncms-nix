@@ -1,7 +1,7 @@
-# Pinned upstream sources. Emoncms core 11.9.10 plus the module commits that
-# were current on each module's branch while 11.9.10 was the stable release
-# (2025-09-17 .. 2025-09-20). Branches follow the reference Docker build:
-# graph/dashboard/app/device from `stable`, sync/postprocess/backup from `master`.
+# Pinned upstream sources. Emoncms core 11.19.8 (2026-09-29), the last 11.x
+# release, plus each module's last commit before its Bootstrap 5 conversion
+# (2026-09-24), which belongs to Emoncms 12 and does not render on the 11.x
+# core. Versions are those in each commit's module.json.
 { fetchFromGitHub }:
 let
   gh =
@@ -17,59 +17,59 @@ let
 in
 {
   emoncms = {
-    version = "11.9.10";
+    version = "11.19.8";
     src =
-      gh "emoncms" "emoncms" "995555e1451982a7b19a0392da53f5bfa8491028"
-        "sha256-oDgn+2Aa/RLD2HCAAnC4KrY7fu3RhGM23WEhfpqgri4=";
+      gh "emoncms" "emoncms" "7f8a5b2d4df399599bbb8026c064d956a5a85f34"
+        "sha256-iTc1i+/KmsFkCN1iLGE9etfYST+XDEJCtX6n2cDPFJM=";
   };
 
   # Installed directly into Modules/<name>
   modules = {
     graph = {
-      version = "2.2.7";
+      version = "3.4.4";
       src =
-        gh "emoncms" "graph" "4d6cec75219399d0646d80877a9d82697fc9feb1"
-          "sha256-gYkhiphWubTBq42d5ipir04j1d2PUfMgiOHhamRZr30=";
+        gh "emoncms" "graph" "01aa8f29abfc021b21bd0527e52ce04edcf3e4f4"
+          "sha256-h9dIsoJzhKdh4X3JuHQbwRg1fWRdTBxZ9LOw0SX3Zxc=";
     };
     dashboard = {
-      version = "2.4.3";
+      version = "4.1.4";
       src =
-        gh "emoncms" "dashboard" "c8edbf8979b55434bc2f2f0c27499fc277c061b4"
-          "sha256-HcRAI2AtDVGwNyQC3e/qtmkXf3QSCa+a1pP55K7xzR0=";
+        gh "emoncms" "dashboard" "12e15bc5cc7ed9b9919855b1f98f2bfcdabcd630"
+          "sha256-0VVoW0lOh0sBVVqt/Xz+QT3ybEoZ1Y3pgf5fB7mA12Q=";
     };
     app = {
-      version = "3.1.5";
+      version = "3.5.0";
       src =
-        gh "emoncms" "app" "81b0d1b28287031ddddfae2365f18f8e933327eb"
-          "sha256-mktWulMeymVTIuCi4faaCrDwnvp5dA0BgVn65fHXceY=";
+        gh "emoncms" "app" "52ff3d9ace5e81e38833be501c5290e5fdb08c16"
+          "sha256-ItB+RZ/OjgyHfjxmZQBw2FWpLpUq83PTTk4GgUObOVw=";
     };
     device = {
-      version = "2.3.5";
+      version = "2.5.0";
       src =
-        gh "emoncms" "device" "2e10f590339b271c358978625dd360a5921a1aac"
-          "sha256-qqZFdwHGo/lDzbDyMggK9W70wY+Nm/sOISO8BlWsmCI=";
+        gh "emoncms" "device" "642309e65988ebe6c669c3fd4db97b52c6be6a46"
+          "sha256-1n4ZoS8w9k1r+Xm+ZejPfud9i9QEztdmlpO9pbrnwyM=";
     };
   };
 
   # Installed under <emoncms_dir>/modules/<name>, with <name>-module symlinked into Modules/
   linkedModules = {
     sync = {
-      version = "3.2.2";
+      version = "3.5.1";
       src =
-        gh "emoncms" "sync" "f3602eb15abf9586ccd2e579bdca73e282396e13"
-          "sha256-6IG0jcoruYLvolFWlRoUIXX1Lemp7bG2sntT+63qTUw=";
+        gh "emoncms" "sync" "a5f65a5e6f883f95a874c7d4810bf65a1c4c2642"
+          "sha256-/reF+dEjWL8zWvOu1R/NBJN4DAfxg4/quHgeW7DcqFU=";
     };
     postprocess = {
-      version = "2.4.9";
+      version = "2.7.1";
       src =
-        gh "emoncms" "postprocess" "061e8da5f5c98254a36754d7da705ca6da32b392"
-          "sha256-/itFfwwXkIKWP02ruwGcoC4Lw1nCwTEZitszaUhyFAg=";
+        gh "emoncms" "postprocess" "592db530dcc92859e81df78f5fcd8808c2cf2c28"
+          "sha256-7OWqN2p2lHqP7mkyF5OLKNYpqNJeaCQx7M5KIKsdMb8=";
     };
     backup = {
-      version = "2.3.5";
+      version = "2.5.0";
       src =
-        gh "emoncms" "backup" "d2742e2c125d27307de92577a420c8a35289ce80"
-          "sha256-uIUTUrKcFYrFxrI/TRb8GBxMM5TgXcZnwL2v0rCZnp4=";
+        gh "emoncms" "backup" "30c922bbe4289059d2c5097e688638fc2d85b72c"
+          "sha256-IAPLKh/Y/HVOTSLaGIgFbDpYzbLYLmScdXGEvhB2j+A=";
     };
   };
 

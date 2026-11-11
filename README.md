@@ -2,7 +2,7 @@
 
 [![check](https://github.com/adamlc/emoncms-nix/actions/workflows/check.yml/badge.svg)](https://github.com/adamlc/emoncms-nix/actions/workflows/check.yml)
 
-Emoncms 11.9.10 as native NixOS services: a read-only package, a php-fpm pool behind nginx, and one systemd unit per background worker. It replaces the all-in-one s6 container from [Open-Building-Management/emoncms](https://github.com/Open-Building-Management/emoncms), which was used as the behavioural reference.
+Emoncms 11.19.8 as native NixOS services: a read-only package, a php-fpm pool behind nginx, and one systemd unit per background worker. It replaces the all-in-one s6 container from [Open-Building-Management/emoncms](https://github.com/Open-Building-Management/emoncms), which was used as the behavioural reference.
 
 It is in real use: an existing installation has been moved from that container onto this module and runs day to day, with MQTT input, feeds, dashboards and the background workers all working. The flake is meant to be usable as-is by anyone running NixOS; see [Migrating from the Docker container](#migrating-from-the-docker-container) if you are coming from the container.
 
@@ -79,7 +79,7 @@ Paths:
 
 | Path | Contents |
 |---|---|
-| `/nix/store/…-emoncms-11.9.10/share/emoncms/www` | Web root: core + graph, dashboard, app, device in `Modules/` |
+| `/nix/store/…-emoncms-11.19.8/share/emoncms/www` | Web root: core + graph, dashboard, app, device in `Modules/` |
 | `…/share/emoncms/modules/{sync,postprocess,backup}` | Linked modules (the container's `/opt/emoncms/modules`), with `<name>-module` symlinked into `Modules/` |
 | `/var/opt/emoncms/{phpfina,phptimeseries,backup}` | Data (`dataDir`, upstream's default location) |
 | `/var/log/emoncms` | `emoncms.log` and job logs (`logDir`) |
@@ -93,7 +93,7 @@ Emoncms reads `default-settings.ini` and overlays `settings.ini`, which must sit
 
 ```ini
 display_errors = false
-emoncms_dir = '/nix/store/…-emoncms-11.9.10/share/emoncms'
+emoncms_dir = '/nix/store/…-emoncms-11.19.8/share/emoncms'
 openenergymonitor_dir = '/var/empty'
 
 [sql]
@@ -108,7 +108,7 @@ dbtest = true
 enabled = true
 host = '127.0.0.1'
 port = 6379
-prefix = ''                   ; must stay '' for the 11.9.x service-runner
+prefix = ''                   ; '' or 'emoncms'; '' matches the container
 auth = ''                     ; or from redis.passwordFile
 
 [mqtt]
@@ -130,7 +130,6 @@ phptimeseries[datadir] = '/var/opt/emoncms/phptimeseries/'
 [interface]
 feedviewpath = 'graph/'
 enable_admin_ui = true
-enable_update_ui = false      ; updates come from the flake pins
 
 [log]
 enabled = true
@@ -155,7 +154,7 @@ Secrets never enter the Nix store. The template holds placeholders, and `emoncms
 `database.{createLocally,host,port,name,user,passwordFile}`,
 `redis.{createLocally,host,port,prefix,passwordFile}`,
 `mqtt.{enable,createLocally,host,port,user,passwordFile,basetopic,clientId,localBroker.address,localBroker.users}`,
-`feedwriter.enable`, `feedwriterInterval`, `serviceRunner.enable`, `syncUpload.enable`, `settings`.
+`feedwriter.enable`, `feedwriterInterval`, `gravatar.enable`, `serviceRunner.enable`, `syncUpload.enable`, `settings`.
 
 To change the installed modules, override the package:
 
@@ -168,7 +167,7 @@ services.emoncms.package = pkgs.emoncms.override {
 
 ## Design notes
 
-**Native services rather than a container.** Each daemon is a stock NixOS service, and systemd ordering replaces s6's oneshots. The cost is that Emoncms's self-update features cannot work against a read-only tree: the admin update page is turned off (`enable_update_ui = false`), and you upgrade by changing the pins in `pkgs/sources.nix`.
+**Native services rather than a container.** Each daemon is a stock NixOS service, and systemd ordering replaces s6's oneshots. The cost is that Emoncms's self-update features cannot work against a read-only tree: you upgrade by changing the pins in `pkgs/sources.nix`. In 11.19.8 the admin Update and Components pages can no longer be hidden; their buttons queue EmonScripts jobs that service-runner cannot find (`OPENENERGYMONITOR_DIR` is `/var/empty`), so they do nothing.
 
 **MQTT extension.** `mgdm/Mosquitto-PHP` does not compile on PHP 8 (it fails on `TSRMLS_CC`). The flake builds OpenEnergyMonitor's fork with `php84.buildPecl`, against the same PHP that php-fpm and the workers use. The only packaging wrinkle is that its `config.m4` wants mosquitto's headers and library under one prefix, so it gets a `symlinkJoin` of `mosquitto.dev` and `mosquitto.lib`.
 
@@ -177,14 +176,16 @@ services.emoncms.package = pkgs.emoncms.override {
 - `/opt/emoncms/modules` → the store modules dir.
 - `/var/lock/*.lock` → `/run/emoncms/`. On NixOS `/run/lock` is root-only.
 - The backup module's `/tmp/emoncms-flag-*` and `/tmp/backuplock` → `/run/emoncms/`. php-fpm and service-runner each have a private `/tmp`, so files they both need can't live there.
-- service-runner takes `REDIS_HOST`/`REDIS_PORT` from the environment instead of assuming localhost.
+- The gravatar cache directory, a constant in `user_model.php`, → `/var/cache/emoncms/gravatar`, which exists only with `gravatar.enable`.
+
+service-runner only runs scripts from a built-in whitelist. Its `/opt/emoncms/modules` entries are covered by the patch above; the module passes `EMONCMS_DIR`, `EMONCMS_LOG_DIR`, `REDIS_HOST` and `REDIS_PORT` in its environment.
 - Backup scripts: `mysqldump -p"${password}"` only adds `-p` when a password is set, because socket auth has none and a bare `-p` prompts. They also call `emoncms-cli admin:dbupdate` instead of EmonScripts' `emoncmsdbupdate.php`. The import checks the username rather than the password before restoring the database, for the same reason.
 
 The backup, sync and postprocess shell scripts call `sudo` and `systemctl`. service-runner's PATH has a `sudo` that simply runs the command unprivileged. Their `systemctl stop/start` calls fail as non-root, as they do in the container, so the export log reports "completed with ERRORS" even when the archive is fine.
 
 php-fpm clears the environment, so the pool gets an explicit `PATH` (coreutils, grep, sed, awk, procps, systemd, util-linux, which, php). The postprocess and backup pages check for service-runner with `systemctl show` and `ps ax`, and without it they report service-runner as not running and postprocess jobs are never queued.
 
-**nginx instead of Apache.** `.htaccess` is translated as follows: unknown paths are rewritten to `index.php?q=<path>`; `/emoncms/<x>` is rewritten to `/<x>`; access to `/scripts/`, `/tests/`, dotfiles, `php-info.php` and `*.ini|cfg|log|sh|sql|bak…` is denied; `HTTP_AUTHORIZATION` is passed through; uploads are allowed up to 3G and requests up to 300s, for backup import.
+**nginx instead of Apache.** `.htaccess` is translated as follows: unknown paths are rewritten to `index.php?q=<path>`; `/emoncms/<x>` is rewritten to `/<x>`; access to `/scripts/`, `/tests/`, dotfiles, `php-info.php` and `*.ini|cfg|log|sh|sql|bak…` is denied; `HTTP_AUTHORIZATION` is passed through; uploads are allowed up to 3G and requests up to 300s, for backup import. Apache's rule uses the `B` flag so an encoded `&` in the path can't start a second `q`; nginx already escapes a capture placed in the query string, so `/a%26q=b` reaches PHP as the single argument `q=a%26q=b`. Emoncms sends its own `X-Frame-Options`, `Content-Security-Policy: frame-ancestors` and `Referrer-Policy` headers (set them with `interface.frame_ancestors`, `embed_frame_ancestors` and `referrer_policy`), so the vhost adds only `X-Content-Type-Options`. `embed_frame_ancestors` (default `*`) applies only to requests without a session cookie. A logged-in browser gets `frame_ancestors` (default `self`), so to frame Emoncms in, say, Home Assistant from a browser that is also signed in to Emoncms, add that origin: `services.emoncms.settings.interface.frame_ancestors = "self https://ha.example.org";`.
 
 ## Local test VM on macOS (vfkit)
 
@@ -265,7 +266,9 @@ The upload limit is 3 GB. For a larger archive use route 2.
 2. Rebuild. `emoncms-setup` applies schema migrations on start.
 3. Check the build still applies the sed patches above. `substituteInPlace --replace-fail` is used where a miss should fail the build.
 
-For 11.9.10 → 12.x specifically: take a DB dump first (`mysqldump emoncms`). Version 12 rehashes passwords to bcrypt on login, so rolling back afterwards locks those users out, and a NixOS rollback does not roll back the database. Version 12's service-runner uses a script whitelist with `/opt/emoncms/modules` paths, which the sed patch covers.
+Take a DB dump before any upgrade (`mysqldump emoncms`): a NixOS rollback does not roll back the database. Since 11.16 Emoncms rehashes each password to bcrypt when its owner logs in, so going back to 11.9.10 afterwards without the dump locks those users out.
+
+For 11.19.8 → 12.x: the modules' Bootstrap 5 rewrites (from 2026-09-24) belong to Emoncms 12, so move core and all seven modules together.
 
 ## Verification
 
@@ -290,9 +293,9 @@ Not verified:
 1. **Migration routes.** A real installation has been migrated from the container with the Backup module route in [Migrating from the Docker container](#migrating-from-the-docker-container), but only from one container version. The manual route (copying the database and files) hasn't been tried. The container's Redis prefix is also `''`, so that matches.
 2. **The archive's `settings.ini` is a symlink.** Backups contain it as a symlink to `/run/emoncms/settings.ini` rather than its contents. That's arguably right, since settings come from Nix, but it differs from the container.
 3. **The export log always ends "completed with ERRORS"**, because of the `systemctl stop feedwriter` and `cd /boot` (Raspberry Pi) steps. The archive itself is fine.
-4. **Edge cases of the `.htaccess` translation.** Odd paths, such as ones containing spaces, `&` or `%2F`, haven't been compared against Apache.
+4. **Edge cases of the `.htaccess` translation.** Odd paths, such as ones containing spaces or `%2F`, haven't been compared against Apache. An encoded `&` was checked against nginx directly (it stays escaped), but not in the VM test.
 5. **Remote MariaDB/Redis** (`createLocally = false` with `passwordFile`) is implemented but not covered by the test.
-6. **Version choices.** Module versions are the commits that were current while core 11.9.10 was the stable release. Device is 2.3.5, where the reference changelog says 2.3.3. The other module versions match the changelog.
+6. **Version choices.** Module versions are each module's last commit before its Bootstrap 5 conversion, the newest that match the 11.19.8 core: graph 3.4.4, dashboard 4.1.4, app 3.5.0, device 2.5.0, sync 3.5.1, postprocess 2.7.1, backup 2.5.0. Their asset references were checked against the 11.19.8 tree, which dropped Flot 0.8, moment.js and the vis module.
 7. **The vfkit launcher has been run on one Mac**, where the guest booted and the web login worked. Other commands, such as `reset`, haven't been checked there. Before that, the x86_64 guest image was built and booted under QEMU with the same disk layout (virtio root disk, a second disk with serial `emoncms-data`, virtio console on hvc0). That checked the root grows to fill its disk, `/var` is formatted on first boot and survives a rebuilt image, and Emoncms, MQTT input and SSH work.
 
 ## Licence

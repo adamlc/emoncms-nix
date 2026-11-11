@@ -8,11 +8,25 @@ While the version is 0.x, a minor bump (0.1 → 0.2) may change module options i
 
 ### Added
 
+- `services.emoncms.gravatar.enable` (default off) turns on Emoncms's server-side gravatar avatars, cached in `/var/cache/emoncms/gravatar`. Emoncms only fetches from gravatar.com when that directory exists.
 - README guide to migrating an existing installation from the Open-Building-Management Docker container, by Backup module export/import or by copying the database and timeseries files.
 
 ### Changed
 
 - README notes that the flake is in real use and drops wording that assumed the repository was still private.
+- **Emoncms moves from 11.9.10 to 11.19.8**, the last 11.x release. Take a database dump (`mysqldump emoncms`) before switching: `emoncms-setup` applies the schema migrations on first start, and from then on each user's password is rehashed to bcrypt when they log in, so rolling back to 11.9.10 without the dump locks those users out. A NixOS rollback does not roll back the database.
+- Modules move with it: graph 2.2.7 → 3.4.4, dashboard 2.4.3 → 4.1.4, app 3.1.5 → 3.5.0, device 2.3.5 → 2.5.0, sync 3.2.2 → 3.5.1, postprocess 2.4.9 → 2.7.1, backup 2.3.5 → 2.5.0. These are each module's last versions before the Bootstrap 5 rewrite that belongs to Emoncms 12. 11.19.8 removes the vis and time modules and the old Flot charts, so custom pages or dashboards that loaded `vis/...` or `Lib/flot/` stop working.
+- service-runner only runs jobs from its built-in whitelist (backup, sync, postprocess and a few admin actions), so anything else pushed onto its Redis queue is now rejected. The module passes it `EMONCMS_DIR` and `EMONCMS_LOG_DIR`.
+- The nginx vhost no longer adds `X-Frame-Options: SAMEORIGIN` and `Referrer-Policy: same-origin`. Emoncms now sends these itself, set by the new `interface.frame_ancestors`, `embed_frame_ancestors` and `referrer_policy` settings. With the defaults, public dashboards, apps and `graph/embed` opened with a readkey can be framed by other sites, and the referrer policy is `strict-origin-when-cross-origin`. A page loaded with an Emoncms session cookie is always sent `frame_ancestors` (default `"self"`), so if you embed Emoncms in another site, such as Home Assistant, from a browser that is also logged in to Emoncms, the frame is blocked. List that site in `services.emoncms.settings.interface.frame_ancestors`, e.g. `"self https://ha.example.org"`. To block embedding entirely, set `interface.embed_frame_ancestors = "self"`.
+- The backup module's generated `config.cfg` sets `drive_backup_enabled="no"`. The new attached-drive backup needs root, which service-runner does not have here.
+
+### Deprecated
+
+- Upstream moved the mail settings `smtp.from_email`, `smtp.from_name`, `smtp.default_emailto` and `smtp.sendmail` to a new `[email]` section (`email.from_email`, `email.from_name`, `email.default_to`, `email.transport`). The old names still work in 11.19.8; if you set them through `services.emoncms.settings`, move them when convenient.
+
+### Removed
+
+- The module no longer writes `interface.enable_update_ui`, which 11.19.8 dropped. The admin Update page is always shown now; its buttons do nothing on NixOS, as updates come from the flake pins.
 
 ### Security
 
