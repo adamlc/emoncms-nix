@@ -96,21 +96,6 @@ stdenvNoCC.mkDerivation {
         --replace-fail 'if [ -n "$password" ]' 'if [ -n "$username" ]'
     ''}
 
-    ${lib.optionalString (lib.elem "sync" linkedModules) ''
-      # The uploader fetches the remote feed list at startup, and again only
-      # when the UI asks for a reload. If the remote doesn't answer (at boot,
-      # before DNS works) it carries on with no feeds and never uploads, so
-      # exit and let systemd retry. An unconfigured remote fails the same
-      # call with a different message and is left alone.
-      substituteInPlace $root/modules/sync/sync_upload.php \
-        --replace-fail '    $feeds = array();' \
-          '    if (strpos($feeds["message"] ?? "", "No response") === 0) exit(1);
-          $feeds = array();' \
-        --replace-fail '        $redis->del("emoncms_sync:reload");' \
-          '        if (strpos($feeds["message"] ?? "", "No response") === 0) { print "Error: could not reload feeds\n"; exit(1); }
-              $redis->del("emoncms_sync:reload");'
-    ''}
-
     runHook postInstall
   '';
 
