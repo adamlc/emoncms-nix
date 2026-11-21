@@ -6,6 +6,10 @@ While the version is 0.x, a minor bump (0.1 → 0.2) may change module options i
 
 ## [Unreleased]
 
+### Fixed
+
+- `emoncms_sync` no longer runs on without uploading anything when the remote Emoncms doesn't answer at startup, for example at boot before DNS is up. It used to log `Error: could not load feeds` once, then "Nothing to upload" until something restarted it. It now exits, and systemd retries every 60 seconds until the remote answers. A failed reload after changing the Sync settings is handled the same way. An install with no remote configured behaves as before.
+
 ## [0.2.0] - 2026-11-11
 
 Pins **Emoncms 11.19.8**, PHP 8.4.27, nixos-26.05.
