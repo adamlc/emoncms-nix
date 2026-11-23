@@ -6,6 +6,10 @@ While the version is 0.x, a minor bump (0.1 → 0.2) may change module options i
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-23
+
+Pins **Emoncms 11.19.8**, PHP 8.4.27, nixos-26.05.
+
 ### Fixed
 
 - `emoncms_sync` no longer runs on without uploading anything when the remote Emoncms doesn't answer at startup, for example at boot before DNS is up. It used to log `Error: could not load feeds` once, then "Nothing to upload" until something restarted it. It now exits, and systemd retries every 60 seconds until the remote answers. A failed reload after changing the Sync settings is handled the same way. An install with no remote configured behaves as before.
@@ -53,6 +57,7 @@ Pins **Emoncms 11.9.10**, PHP 8.4, nixos-26.05.
 - NixOS VM tests for x86_64-linux and aarch64-linux, covering MQTT input, feeds, postprocess, sync and a backup export/import round trip.
 - `nix run .#vm`, a vfkit test VM for macOS.
 
-[Unreleased]: https://github.com/adamlc/emoncms-nix/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/adamlc/emoncms-nix/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/adamlc/emoncms-nix/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/adamlc/emoncms-nix/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/adamlc/emoncms-nix/releases/tag/v0.1.0
