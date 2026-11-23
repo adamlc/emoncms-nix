@@ -2,7 +2,7 @@
 # release, plus each module's last commit before its Bootstrap 5 conversion
 # (2026-09-24), which belongs to Emoncms 12 and does not render on the 11.x
 # core. Versions are those in each commit's module.json.
-{ fetchFromGitHub }:
+{ fetchFromGitHub, applyPatches }:
 let
   gh =
     owner: repo: rev: hash:
@@ -55,9 +55,15 @@ in
   linkedModules = {
     sync = {
       version = "3.5.1";
-      src =
-        gh "emoncms" "sync" "a5f65a5e6f883f95a874c7d4810bf65a1c4c2642"
-          "sha256-/reF+dEjWL8zWvOu1R/NBJN4DAfxg4/quHgeW7DcqFU=";
+      src = applyPatches {
+        name = "sync-3.5.1-patched";
+        src =
+          gh "emoncms" "sync" "a5f65a5e6f883f95a874c7d4810bf65a1c4c2642"
+            "sha256-/reF+dEjWL8zWvOu1R/NBJN4DAfxg4/quHgeW7DcqFU=";
+        # The uploader loads the remote feed list once at startup and used to
+        # idle forever with no feeds if the remote didn't answer.
+        patches = [ ./patches/sync-exit-on-unreachable-remote.patch ];
+      };
     };
     postprocess = {
       version = "2.7.1";
