@@ -6,6 +6,22 @@ While the version is 0.x, a minor bump (0.1 → 0.2) may change module options i
 
 ## [Unreleased]
 
+### Changed
+
+- **Emoncms moves from 11.19.8 to 12.2.1.** Emoncms 12 moves every page in core and the modules from Bootstrap 2 to Bootstrap 5, with one theme in light and dark. Neither the database schema nor the `settings.ini` keys change from 11.19.8, so no configuration change is needed. Take a database dump (`mysqldump emoncms`) before switching anyway: a NixOS rollback does not roll back the database.
+- Modules move with it, to the versions released for Emoncms 12: graph 3.4.4 → 3.5.0, dashboard 4.1.4 → 4.2.1, app 3.5.0 → 3.8.4, device 2.5.0 → 2.6.2, sync 3.5.1 → 3.6.0, postprocess 2.7.1 → 2.8.0, backup 2.5.0 → 2.6.0. These only work with a 12.x core, and third-party modules or custom pages written for Bootstrap 2 need updating.
+- The Sync page now has Upload and Download tabs, and its Sync Inputs and Sync Dashboards sections are removed.
+- Creating a new API key and changing your username now only work by POST, so scripts that did either with a GET request need changing.
+- The time module is back in core.
+
+### Fixed
+
+- The sync uploader fix from 0.2.1 now comes from upstream sync, so the flake no longer patches it. Behaviour is the same, except that when a reload after changing the Sync settings fails, `emoncms_sync` now keeps its feed list and retries every 60 seconds instead of exiting.
+
+### Security
+
+- Emoncms 12.2.1 drops a cached API key session when the key is rotated, so an old key stops working at once, and validates the MySQL timeseries type when a feed is created. Sync 3.6.0 fixes an XSS in its feed engine badge.
+
 ## [0.2.1] - 2026-11-23
 
 Pins **Emoncms 11.19.8**, PHP 8.4.27, nixos-26.05.

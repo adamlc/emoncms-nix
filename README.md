@@ -2,7 +2,7 @@
 
 [![check](https://github.com/adamlc/emoncms-nix/actions/workflows/check.yml/badge.svg)](https://github.com/adamlc/emoncms-nix/actions/workflows/check.yml)
 
-Emoncms 11.19.8 as native NixOS services: a read-only package, a php-fpm pool behind nginx, and one systemd unit per background worker. It replaces the all-in-one s6 container from [Open-Building-Management/emoncms](https://github.com/Open-Building-Management/emoncms), which was used as the behavioural reference.
+Emoncms 12.2.1 as native NixOS services: a read-only package, a php-fpm pool behind nginx, and one systemd unit per background worker. It replaces the all-in-one s6 container from [Open-Building-Management/emoncms](https://github.com/Open-Building-Management/emoncms), which was used as the behavioural reference.
 
 It is in real use: an existing installation has been moved from that container onto this module and runs day to day, with MQTT input, feeds, dashboards and the background workers all working. The flake is meant to be usable as-is by anyone running NixOS; see [Migrating from the Docker container](#migrating-from-the-docker-container) if you are coming from the container.
 
@@ -79,7 +79,7 @@ Paths:
 
 | Path | Contents |
 |---|---|
-| `/nix/store/…-emoncms-11.19.8/share/emoncms/www` | Web root: core + graph, dashboard, app, device in `Modules/` |
+| `/nix/store/…-emoncms-12.2.1/share/emoncms/www` | Web root: core + graph, dashboard, app, device in `Modules/` |
 | `…/share/emoncms/modules/{sync,postprocess,backup}` | Linked modules (the container's `/opt/emoncms/modules`), with `<name>-module` symlinked into `Modules/` |
 | `/var/opt/emoncms/{phpfina,phptimeseries,backup}` | Data (`dataDir`, upstream's default location) |
 | `/var/log/emoncms` | `emoncms.log` and job logs (`logDir`) |
@@ -93,7 +93,7 @@ Emoncms reads `default-settings.ini` and overlays `settings.ini`, which must sit
 
 ```ini
 display_errors = false
-emoncms_dir = '/nix/store/…-emoncms-11.19.8/share/emoncms'
+emoncms_dir = '/nix/store/…-emoncms-12.2.1/share/emoncms'
 openenergymonitor_dir = '/var/empty'
 
 [sql]
@@ -167,7 +167,7 @@ services.emoncms.package = pkgs.emoncms.override {
 
 ## Design notes
 
-**Native services rather than a container.** Each daemon is a stock NixOS service, and systemd ordering replaces s6's oneshots. The cost is that Emoncms's self-update features cannot work against a read-only tree: you upgrade by changing the pins in `pkgs/sources.nix`. In 11.19.8 the admin Update and Components pages can no longer be hidden; their buttons queue EmonScripts jobs that service-runner cannot find (`OPENENERGYMONITOR_DIR` is `/var/empty`), so they do nothing.
+**Native services rather than a container.** Each daemon is a stock NixOS service, and systemd ordering replaces s6's oneshots. The cost is that Emoncms's self-update features cannot work against a read-only tree: you upgrade by changing the pins in `pkgs/sources.nix`. Since 11.19.8 the admin Update and Components pages can no longer be hidden; their buttons queue EmonScripts jobs that service-runner cannot find (`OPENENERGYMONITOR_DIR` is `/var/empty`), so they do nothing.
 
 **MQTT extension.** `mgdm/Mosquitto-PHP` does not compile on PHP 8 (it fails on `TSRMLS_CC`). The flake builds OpenEnergyMonitor's fork with `php84.buildPecl`, against the same PHP that php-fpm and the workers use. The only packaging wrinkle is that its `config.m4` wants mosquitto's headers and library under one prefix, so it gets a `symlinkJoin` of `mosquitto.dev` and `mosquitto.lib`.
 
@@ -268,7 +268,7 @@ The upload limit is 3 GB. For a larger archive use route 2.
 
 Take a DB dump before any upgrade (`mysqldump emoncms`): a NixOS rollback does not roll back the database. Since 11.16 Emoncms rehashes each password to bcrypt when its owner logs in, so going back to 11.9.10 afterwards without the dump locks those users out.
 
-For 11.19.8 → 12.x: the modules' Bootstrap 5 rewrites (from 2026-09-24) belong to Emoncms 12, so move core and all seven modules together.
+Emoncms 12 core and the modules' Bootstrap 5 releases only work together (see upstream's `docs/developer/notes/bootstrap5-release.md` for the matching versions), so move core and all seven modules at once. Going from 11.19.8 to 12.2.1 changes neither the schema nor the `settings.ini` keys.
 
 ## Verification
 
@@ -284,6 +284,7 @@ For 11.19.8 → 12.x: the modules' Bootstrap 5 rewrites (from 2026-09-24) belong
 - **Postprocess**: a `scalefeed` job created through the API is queued to `service-runner` and writes the scaled values.
 - **Sync download**: after saving `remote` on the Sync page's API, a feed download is run by `service-runner` (`emoncms-sync.sh`) and the data arrives locally.
 - **Sync upload**: flagging a feed for upload makes `emoncms_sync` create it on `remote` and upload its data.
+- The Bootstrap 5 pages load for a logged-in user (inputs, feeds, graph, devices, dashboard list/view/editor, a My Electric Flow app, sync, postprocess, backup and admin) with the Bootstrap 5 stylesheet and no PHP errors in the page, and the theme assets, `manifest.json` and `service-worker.js` are served.
 - The backup page sees service-runner as running.
 - **Backup round trip through the web endpoints**: `/backup/start` exports, `/backup/download` returns an archive with `emoncms.sql` and the phpfina data, and uploading it to `/backup/upload` imports it: a later input disappears, a deleted feed file comes back, and restored files stay writable by the `emoncms` user.
 - php-fpm logs no PHP fatal errors.
@@ -295,7 +296,7 @@ Not verified:
 3. **The export log always ends "completed with ERRORS"**, because of the `systemctl stop feedwriter` and `cd /boot` (Raspberry Pi) steps. The archive itself is fine.
 4. **Edge cases of the `.htaccess` translation.** Odd paths, such as ones containing spaces or `%2F`, haven't been compared against Apache. An encoded `&` was checked against nginx directly (it stays escaped), but not in the VM test.
 5. **Remote MariaDB/Redis** (`createLocally = false` with `passwordFile`) is implemented but not covered by the test.
-6. **Version choices.** Module versions are each module's last commit before its Bootstrap 5 conversion, the newest that match the 11.19.8 core: graph 3.4.4, dashboard 4.1.4, app 3.5.0, device 2.5.0, sync 3.5.1, postprocess 2.7.1, backup 2.5.0. Their asset references were checked against the 11.19.8 tree, which dropped Flot 0.8, moment.js and the vis module.
+6. **Version choices.** Core is the 12.2.1 release and the modules are their stable-branch releases: graph 3.5.0, dashboard 4.2.1, app 3.8.4, device 2.6.2, postprocess 2.8.0, backup 2.6.0. Sync is pinned to a master commit (3.6.0 plus the upstream fix for the uploader idling when the remote is unreachable at startup). The VM test covers inputs, feeds, postprocess, sync and backup, but the Bootstrap 5 pages (dashboards, apps, graphs) have only been checked to load without PHP errors, not clicked through in a browser.
 7. **The vfkit launcher has been run on one Mac**, where the guest booted and the web login worked. Other commands, such as `reset`, haven't been checked there. Before that, the x86_64 guest image was built and booted under QEMU with the same disk layout (virtio root disk, a second disk with serial `emoncms-data`, virtio console on hvc0). That checked the root grows to fill its disk, `/var` is formatted on first boot and survives a rebuilt image, and Emoncms, MQTT input and SSH work.
 
 ## Licence

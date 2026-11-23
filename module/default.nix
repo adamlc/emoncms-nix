@@ -174,7 +174,7 @@ in
     package = mkOption {
       type = types.package;
       default = pkgs.callPackage ../pkgs/emoncms.nix { };
-      defaultText = lib.literalExpression "emoncms 11.19.8 with graph, dashboard, app, device, sync, postprocess, backup";
+      defaultText = lib.literalExpression "emoncms 12.2.1 with graph, dashboard, app, device, sync, postprocess, backup";
       description = ''
         Emoncms tree. Override `modules` / `linkedModules` on it to change which
         modules are installed, e.g. `pkgs.emoncms.override { linkedModules = [ "postprocess" ]; }`.
@@ -295,8 +295,9 @@ in
         type = types.str;
         default = "";
         description = ''
-          Redis key prefix. service-runner reads its queue with either an empty
-          prefix or "emoncms"; empty matches the reference container. Changing
+          Redis key prefix. service-runner reads its queue with an empty
+          prefix or "emoncms" (with or without a trailing colon); empty matches
+          the reference container. Changing
           it on a running install drops the Redis cache (rebuilt from MySQL) and
           anything still in the feedwriter buffer.
         '';
