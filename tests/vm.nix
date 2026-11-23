@@ -183,6 +183,25 @@ in
         print(machine.succeed("journalctl -u emoncms_sync --no-pager | tail -40"))
         assert 42.0 in feed_values(remote, f"/var/opt/emoncms/phpfina/{up}.dat")
 
+    with subtest("Bootstrap 5 pages render for a logged-in user"):
+        r = api(machine, "dashboard/create.json", apikey)
+        dashid = int(r)
+        r = api(machine, "app/add.json?app=myelectricflow&name=flow", apikey)
+        assert r.get("success", True), r
+        for path in [
+            "input/view", "feed/view", "graph", "device/view", "dashboard/list",
+            f"dashboard/view?id={dashid}", f"dashboard/edit?id={dashid}",
+            "app/view?name=flow", "app/new", "sync/view", "postprocess", "backup",
+            "admin/info", "admin/component",
+        ]:
+            page = machine.succeed(f"curl -sf -b /tmp/jar 'http://localhost/{path}'")
+            assert "Lib/bootstrap5/css/bootstrap.min.css" in page, path
+            for bad in ("Fatal error", "Parse error", "Warning:</b>", "Deprecated:</b>"):
+                assert bad not in page, (path, bad)
+        for path in ["Lib/bootstrap5/css/bootstrap.min.css", "Lib/bootstrap5/js/bootstrap.bundle.min.js",
+                     "Theme/css/bootstrap5-theme.css", "manifest.json", "service-worker.js"]:
+            machine.succeed(f"curl -sf -o /dev/null 'http://localhost/{path}'")
+
     with subtest("backup page sees service-runner"):
         page = machine.succeed("curl -sf -b /tmp/jar http://localhost/backup")
         assert "service-runner is not running" not in page, page

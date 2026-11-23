@@ -2,9 +2,31 @@
 
 All notable changes to this flake are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the flake uses its own [semantic versioning](https://semver.org/spec/v2.0.0.html), independent of Emoncms's version number. Each release names the Emoncms version it pins.
 
-While the version is 0.x, a minor bump (0.1 → 0.2) may change module options in a way that needs your configuration to change; patch releases do not.
+From 1.0.0, only a major release (1.x → 2.0) changes module options or defaults in a way that needs your configuration to change, or moves to a new Emoncms major version. Minor releases add options or move to a new Emoncms minor version; patch releases fix things. Before 1.0.0, a minor release (0.1 → 0.2) could also need configuration changes.
 
 ## [Unreleased]
+
+## [1.0.0] - 2026-11-23
+
+Pins **Emoncms 12.2.1**, PHP 8.4.27, nixos-26.05.
+
+The first stable release: from here on, module options only change incompatibly in a major release.
+
+### Changed
+
+- **Emoncms moves from 11.19.8 to 12.2.1.** Emoncms 12 moves every page in core and the modules from Bootstrap 2 to Bootstrap 5, with one theme in light and dark. Neither the database schema nor the `settings.ini` keys change from 11.19.8, so no configuration change is needed. Take a database dump (`mysqldump emoncms`) before switching anyway: a NixOS rollback does not roll back the database.
+- Modules move with it, to the versions released for Emoncms 12: graph 3.4.4 → 3.5.0, dashboard 4.1.4 → 4.2.1, app 3.5.0 → 3.8.4, device 2.5.0 → 2.6.2, sync 3.5.1 → 3.6.0, postprocess 2.7.1 → 2.8.0, backup 2.5.0 → 2.6.0. These only work with a 12.x core, and third-party modules or custom pages written for Bootstrap 2 need updating.
+- The Sync page now has Upload and Download tabs, and its Sync Inputs and Sync Dashboards sections are removed.
+- Creating a new API key and changing your username now only work by POST, so scripts that did either with a GET request need changing.
+- The time module is back in core.
+
+### Fixed
+
+- The sync uploader fix from 0.2.1 now comes from upstream sync, so the flake no longer patches it. Behaviour is the same, except that when a reload after changing the Sync settings fails, `emoncms_sync` now keeps its feed list and retries every 60 seconds instead of exiting.
+
+### Security
+
+- Emoncms 12.2.1 drops a cached API key session when the key is rotated, so an old key stops working at once, and validates the MySQL timeseries type when a feed is created. Sync 3.6.0 fixes an XSS in its feed engine badge.
 
 ## [0.2.1] - 2026-11-23
 
@@ -57,7 +79,8 @@ Pins **Emoncms 11.9.10**, PHP 8.4, nixos-26.05.
 - NixOS VM tests for x86_64-linux and aarch64-linux, covering MQTT input, feeds, postprocess, sync and a backup export/import round trip.
 - `nix run .#vm`, a vfkit test VM for macOS.
 
-[Unreleased]: https://github.com/adamlc/emoncms-nix/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/adamlc/emoncms-nix/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/adamlc/emoncms-nix/compare/v0.2.1...v1.0.0
 [0.2.1]: https://github.com/adamlc/emoncms-nix/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/adamlc/emoncms-nix/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/adamlc/emoncms-nix/releases/tag/v0.1.0
