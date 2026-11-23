@@ -2,9 +2,15 @@
 
 All notable changes to this flake are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the flake uses its own [semantic versioning](https://semver.org/spec/v2.0.0.html), independent of Emoncms's version number. Each release names the Emoncms version it pins.
 
-While the version is 0.x, a minor bump (0.1 → 0.2) may change module options in a way that needs your configuration to change; patch releases do not.
+From 1.0.0, only a major release (1.x → 2.0) changes module options or defaults in a way that needs your configuration to change, or moves to a new Emoncms major version. Minor releases add options or move to a new Emoncms minor version; patch releases fix things. Before 1.0.0, a minor release (0.1 → 0.2) could also need configuration changes.
 
 ## [Unreleased]
+
+## [1.0.0] - 2026-11-23
+
+Pins **Emoncms 12.2.1**, PHP 8.4.27, nixos-26.05.
+
+The first stable release: from here on, module options only change incompatibly in a major release.
 
 ### Changed
 
@@ -73,7 +79,8 @@ Pins **Emoncms 11.9.10**, PHP 8.4, nixos-26.05.
 - NixOS VM tests for x86_64-linux and aarch64-linux, covering MQTT input, feeds, postprocess, sync and a backup export/import round trip.
 - `nix run .#vm`, a vfkit test VM for macOS.
 
-[Unreleased]: https://github.com/adamlc/emoncms-nix/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/adamlc/emoncms-nix/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/adamlc/emoncms-nix/compare/v0.2.1...v1.0.0
 [0.2.1]: https://github.com/adamlc/emoncms-nix/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/adamlc/emoncms-nix/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/adamlc/emoncms-nix/releases/tag/v0.1.0

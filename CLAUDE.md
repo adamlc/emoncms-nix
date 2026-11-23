@@ -10,10 +10,11 @@ Pure CI or internal refactors with no visible effect need no entry.
 
 ## Versioning
 
-The flake has its own semver, independent of Emoncms's version (`v0.1.0` pins Emoncms 11.9.10). While on 0.x:
+The flake has its own semver, independent of Emoncms's version (`v1.0.0` pins Emoncms 12.2.1). From 1.0.0:
 
-- Minor bump (`0.1.0` → `0.2.0`): any change that needs users to edit their configuration (option renamed or removed, default changed in a way that changes behaviour), or a new Emoncms major or minor version.
-- Patch bump (`0.1.0` → `0.1.1`): fixes, new options with safe defaults, Emoncms patch updates.
+- Major bump (`1.0.0` → `2.0.0`): any change that needs users to edit their configuration (option renamed or removed, default changed in a way that changes behaviour), or a new Emoncms major version.
+- Minor bump (`1.0.0` → `1.1.0`): new options with safe defaults, or a new Emoncms minor version.
+- Patch bump (`1.0.0` → `1.0.1`): fixes and Emoncms patch updates.
 
 ## Cutting a release
 
